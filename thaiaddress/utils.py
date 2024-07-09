@@ -147,6 +147,8 @@ def preprocess(text: str) -> str:
     text = replace_patterns(text)
     text = add_province_prefix_to_text(text, PROVINCES)
     text = remove_urls(text)
+    text = text.replace('ม.', 'หมู่ ')
+    text = text.replace('บ.', 'บ้าน ')
     text = text.replace('แขวง.', ' แขวง')
     text = text.replace('เขต.', ' เขต')
     text = text.replace('ตำบล.', ' ตำบล')
@@ -240,7 +242,7 @@ def preprocess(text: str) -> str:
 
 
 
-def clean_location_text(text: str) -> str:
+def clean_location_text(text: str,phone_numbers=None) -> str:
     """
     Clean location before using fuzzy string match
     """
@@ -258,6 +260,10 @@ def clean_location_text(text: str) -> str:
     text = text.replace("ตำบล", "")
     text = text.replace("เขต", "")
     text = text.replace("เเขวง", "")
+    text = text.replace("จังห", "")
+    text = re.sub(str(phone_numbers), '', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    
 
     return text
 

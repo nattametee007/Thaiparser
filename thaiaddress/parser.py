@@ -551,8 +551,17 @@ def parse(text=None, display=False, tokenize_engine="newmm-safe"):
             patterns.append(email_addresses)
 
         for pattern in patterns:
-            clean_address = re.sub(pattern, '', text)
-            
+            clean_address = re.sub(pattern, '', address)
+        
+        clean_address = clean_location_text(preprocess(clean_address),phone_numbers)
+        patterns_to_remove = [str(phone_numbers), str(subdistrict), str(district)]
+
+        # Combine all patterns into one
+        combined_pattern = '|'.join(map(re.escape, patterns_to_remove))
+
+        # Substitute all patterns with an empty string and clean up extra spaces
+        clean_address = re.sub(combined_pattern, '', clean_address)
+        clean_address = re.sub(r'\s+', ' ', clean_address).strip()
         dash_count = sum(1 for field in [subdistrict, district, province,phone_numbers, email_addresses,unique_postal] if field == '-')
         if dash_count >= 4:
             return 

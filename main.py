@@ -1,21 +1,28 @@
-from fastapi import FastAPI, HTTPException
+import streamlit as st
 import thaiaddress
 import time
 
-app = FastAPI()
+def main():
+    st.title("Thai Address Parser")
 
-default_address = "3 ชุดบาร์คูณ3โซ่7 ราคา 790 บาท(STCS-01-013) นายมงคล 33/2 หมู่ 6 ตำบลคลองเกตุ อำเภอโคกสำโรง จังหวัดลพบุรี 15120 เบอร์โทร 087-117-4624"
+    address_input = st.text_input("Enter the address:", "3 ชุดบาร์คูณ3โซ่7 ราคา 790 บาท(STCS-01-013) นายมงคล 33/2 หมู่ 6 ตำบลคลองเกตุ อำเภอโคกสำโรง จังหวัดลพบุรี 15120 เบอร์โทร 087-117-4624")
 
-@app.get('/parse-address')
-async def parse_address():
-    start_time = time.time()
+    if st.button("Parse Address"):
+        start_time = time.time()
+        try:
+            parsed_address = thaiaddress.parse(address_input)
+            end_time = time.time()
+            execution_time = end_time - start_time
 
-    parsed_address = thaiaddress.parse(default_address)
-    
-    end_time = time.time()
-    execution_time = end_time - start_time
+            st.write("**Parsed Address:**")
+            if isinstance(parsed_address, dict):
+                st.json(parsed_address)
+            else:
+                st.write(parsed_address)
+            st.write(f"**Execution Time:** {execution_time:.4f} seconds")
+        except Exception as e:
+            st.error("ไม่ใช่ข้อมูลที่อยู่")
+            st.write(f"Error details: {e}")
 
-    return {
-        'parsed_address': parsed_address,
-        'execution_time': execution_time
-    }
+if __name__ == "__main__":
+    main()
