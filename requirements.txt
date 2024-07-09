@@ -1,0 +1,11 @@
+joblib
+pandas
+fuzzywuzzy
+spacy
+python-crfsuite
+pythainlp
+regex
+Levenshtein
+sklearn_crfsuite
+jsonlines
+fastapi
