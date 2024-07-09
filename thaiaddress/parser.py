@@ -519,15 +519,20 @@ def parse(text=None, display=False, tokenize_engine="newmm-safe"):
             subdistrict = "-"
 
         if unique_postal != "-":
-            subdistrict = correct_location_name(subdistrict,SUBDISTRICTS_POST_DICT[unique_postal])
-            district = correct_location_name(district,DISTRICTS_POST_DICT[unique_postal])
-            province = correct_location_name(province,PROVINCES_POST_DICT[unique_postal])
+            province = correct_location_name(province, PROVINCES)
+            subdistrict = correct_location_name(subdistrict, SUBDISTRICTS_POST_DICT[unique_postal])
+            if district == 'เมือง':
+                district = 'เมือง' + province
+            else:
+                district = correct_location_name(district, DISTRICTS_POST_DICT[unique_postal])
         else:
-            unique_postal = get_postal_code(subdistrict,province)
-            subdistrict = correct_location_name(subdistrict,SUBDISTRICTS)
-            district = correct_location_name(district,DISTRICTS)
-            province = correct_location_name(province,PROVINCES)
-            
+            unique_postal = get_postal_code(subdistrict, province)
+            province = correct_location_name(province, PROVINCES)
+            subdistrict = correct_location_name(subdistrict, SUBDISTRICTS)
+            if district == 'เมือง':
+                district = 'เมือง' + province
+            else:
+                district = correct_location_name(district, DISTRICTS)
         
         #Remove duplicated postal code
         province = re.sub(r'[^\u0E00-\u0E7F]', '', province) #ลบกรณีแบ่งคำแล้วติดตัวเลขไปรษณีย์ เช่น แพร่12124
