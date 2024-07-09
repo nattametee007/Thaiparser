@@ -1,5 +1,6 @@
 joblib
 pandas
+numpy<2
 fuzzywuzzy
 spacy
 python-crfsuite
