@@ -19,10 +19,17 @@ from .utils import (
 )
 from Levenshtein import jaro
 from pythainlp.util import Trie
+from pythainlp.phayathaibert.core import NamedEntityTagger
+
+# from transformers import AutoTokenizer
+# from transformers import AutoModelForTokenClassification
+# import torch
 
 import logging
 logging.getLogger().setLevel(logging.ERROR)
 
+# tokenizer = AutoTokenizer.from_pretrained("pythainlp/thainer-corpus-v2-base-model")
+# model = AutoModelForTokenClassification.from_pretrained("pythainlp/thainer-corpus-v2-base-model")
 
 # read model from models path, define colors for output classes
 MODULE_PATH = op.dirname(__file__)
@@ -334,24 +341,6 @@ def correct_location_name(misspelled_word, correct_words, threshold=0.6):
    closest_match = max(correct_words, key=lambda word: jaro(misspelled_word, word))
    return closest_match if jaro(misspelled_word, closest_match) >= threshold else misspelled_word
 
-def fix_span_error(words, ner):
-   """
-   Fix span errors in the named entity recognition (NER) output.
-
-   Parameters:
-   words (list): A list of word tokens.
-   ner (list): A list of NER tags corresponding to the word tokens.
-
-   Returns:
-   list: A list of tuples containing the word tokens and their corresponding NER tags, with span errors fixed.
-   """
-   _new_tag = []
-   for i, j in zip(words, ner):
-       i = tokenizer.decode(i)
-       if j.startswith("B-PERSON") or j.startswith("I-PERSON") or j.startswith("B-LOCATION") or j.startswith("I-LOCATION"):
-           _new_tag.append((i, j))
-   return _new_tag
-
 
 def get_postal_code(subdistrict, province):
     result = ADDR_DF[(ADDR_DF['subdistrict'] == subdistrict) & (ADDR_DF['province'] == province)]
@@ -429,19 +418,9 @@ def parse(text=None, display=False, tokenize_engine="newmm"):
     if not text or text.isspace():  # Handling None, empty string, and string with only spaces
         return None
 
-    # text_list = sent_tokenize(preprocess(text), engine="crfcut")
-
-    # keywords = ["บ้าน", "บริษัท", "เลขที่", "/","ที่อยู่","บ้านเลขที่","หมู่","ซอย","หมู่บ้าน","ถนน","ตำบล","แขวง","ที่ทำการ","แยก","ตรอก","โรงแรม"]
-    # filtered_text_list = [sentence for sentence in text_list if any(keyword in sentence for keyword in keywords)]
-    # new_text = max(filtered_text_list, key=len) if filtered_text_list else ""
-    # # # longest_sentence = filtered_text_list[0]
-    # # new_text = preprocess(longest_sentence)
-
-    new_text = extract_address(text)
-
-    tokens = word_tokenize(new_text, engine=tokenize_engine, custom_dict=custom_dict)
-    chunks = [new_text[i:i+512] for i in range(0, len(new_text), 512)]
-
+    detected_address = extract_address(text)
+    new_text = preprocess(text)
+    tokens = word_tokenize(detected_address, engine=tokenize_engine, custom_dict=custom_dict)
     try:
         features = [tokens_to_features(tokens, i) for i in range(len(tokens))]
     except IndexError as e:
@@ -565,10 +544,6 @@ def parse(text=None, display=False, tokenize_engine="newmm"):
         print(address)
         clean_address = (clean_location_text(address))
         clean_address = filter_only_address(clean_address, phone_numbers, subdistrict, district, province,postal_code)
-        # patterns_to_remove = [str(phone_numbers), str(subdistrict), str(district), str(province)]
-        # combined_pattern = '|'.join(map(re.escape, patterns_to_remove))
-        # clean_address = re.sub(address, '', clean_address)
-        # clean_address = re.sub(r'\s+', ' ', clean_address).strip()
         dash_count = sum(1 for field in [subdistrict, district, province, phone_numbers, email_addresses, unique_postal] if field == '-')
         if dash_count >= 4:
             return
