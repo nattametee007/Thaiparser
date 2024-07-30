@@ -143,11 +143,11 @@ def preprocess(text: str) -> str:
     text = text.replace(")", " ")
     text = text.replace('"', " ")
     text = text.replace(',', " ")
+    text = text.replace('-', "")
     text = re.sub(r"แขวง/เขต(\S+)", r"แขวง/เขต \1", text)
     text = replace_patterns(text)
-    text = add_province_prefix_to_text(text, PROVINCES)
+    # text = add_province_prefix_to_text(text, PROVINCES)
     text = remove_urls(text)
-    text = text.replace('ม.', 'หมู่ ')
     text = text.replace('บ.', 'บ้าน ')
     text = text.replace('แขวง.', ' แขวง')
     text = text.replace('เขต.', ' เขต')
@@ -187,6 +187,17 @@ def preprocess(text: str) -> str:
     text = text.replace("นาง","")
     text = text.replace("ตำบล/แขวง","ตำบล")
     text = text.replace("อำเภอ/เขต","อำเภอ")
+    text = text.replace("บลท", "บ้านเลขที่ ")
+    text = text.replace("หมู่", "หมู่ ")
+    text = text.replace("ซ.", "ซอย ")
+    text = text.replace("ซอย", "ซอย ")
+    text = text.replace("ถ.", "ถนน ")
+    text = text.replace("ถนน", "ถนน ")
+    text = text.replace("หมุ่", "หมู่ ")
+    text = text.replace('ม.', "หมู่ ")
+    text = re.sub(r'(?<!\S)ม(?=\d)', 'หมู่', text)
+    text = re.sub(r'(?<!\S)บ(?!\S)', 'บ้าน', text)
+
 
     if 'กรุงเทพมหานคร' not in text:
         text = text.replace("กรุงเทพ", "กรุงเทพมหานคร")
@@ -222,27 +233,14 @@ def preprocess(text: str) -> str:
     # Remove the zero-width space character
     text = text.replace("\u200b", "")
     
-    # Append " กรุงเทพมหานคร" to the text if it contains "แขวง" or "เขต" and does not already contain "กรุงเทพ", "กทม.", "กทม", or "กรุงเทพมหานคร", and does not contain "อำเภอ", "ตำบล", "อ.", or "ต."
-    # if ("แขวง" in text or "เขต" in text) and not any(area in text for area in ["กรุงเทพ", "กทม.", "กทม", "กรุงเทพมหานคร"]) and not any(area in text for area in ["อำเภอ", "ตำบล", "อ.", "ต."]) and not any(province in text for province in PROVINCES):
-    #     text += " กรุงเทพมหานคร"
-    
     # Remove dots that are not part of a number or email
     text = re.sub(r'(?<!\S)\.(?!\S|\d{2,}@)', '', text)
     
-    # in case  ต โคกกระชาย อ ครบุรี จ จังหวัดนครราชสีมา
-    mapping = {
-    " ต ": " ตำบล",
-    " อ ": " อำเภอ",
-    " จ ": " จังหวัด"
-    }
-    for key, value in mapping.items():
-        text = text.replace(key, value)
-
     return text
 
 
 
-def clean_location_text(text: str,phone_numbers=None) -> str:
+def clean_location_text(text: str,phone_numbers=None,postal_numbers=None) -> str:
     """
     Clean location before using fuzzy string match
     """
@@ -262,6 +260,7 @@ def clean_location_text(text: str,phone_numbers=None) -> str:
     text = text.replace("เเขวง", "")
     text = text.replace("จังห", "")
     text = re.sub(str(phone_numbers), '', text)
+    text = re.sub(str(postal_numbers), '', text)
     text = re.sub(r'\s+', ' ', text).strip()
     
 
