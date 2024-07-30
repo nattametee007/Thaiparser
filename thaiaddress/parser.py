@@ -19,17 +19,9 @@ from .utils import (
 )
 from Levenshtein import jaro
 from pythainlp.util import Trie
-from pythainlp.phayathaibert.core import NamedEntityTagger
-
-# from transformers import AutoTokenizer
-# from transformers import AutoModelForTokenClassification
-# import torch
 
 import logging
 logging.getLogger().setLevel(logging.ERROR)
-
-# tokenizer = AutoTokenizer.from_pretrained("pythainlp/thainer-corpus-v2-base-model")
-# model = AutoModelForTokenClassification.from_pretrained("pythainlp/thainer-corpus-v2-base-model")
 
 # read model from models path, define colors for output classes
 MODULE_PATH = op.dirname(__file__)
