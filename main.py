@@ -18,7 +18,7 @@ def main():
     example_selected = st.selectbox("Select an example address or enter your own:", ["กรอกที่อยู่ด้านล่าง"] + list(address_examples.keys()))
 
     # Text input for custom address or pre-filled example
-    if example_selected == "Enter my own":
+    if example_selected == "กรอกที่อยู่ด้านล่าง":
         address_input = st.text_input("Enter the address:")
     else:
         address_input = st.text_input("Enter the address:", address_examples[example_selected])
