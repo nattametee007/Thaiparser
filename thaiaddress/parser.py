@@ -9,7 +9,7 @@ import joblib
 import pandas as pd
 from fuzzywuzzy import process
 from spacy import displacy
-from pythainlp.tokenize import word_tokenize
+from pythainlp.tokenize import word_tokenize,sent_tokenize
 from pythainlp import tokenize
 from .utils import (
     preprocess,
@@ -19,8 +19,6 @@ from .utils import (
 )
 from Levenshtein import jaro
 from pythainlp.util import Trie
-from pythainlp.corpus import thai_stopwords
-from pythainlp.tag import pos_tag
 
 import logging
 logging.getLogger().setLevel(logging.ERROR)
@@ -28,7 +26,7 @@ logging.getLogger().setLevel(logging.ERROR)
 
 # read model from models path, define colors for output classes
 MODULE_PATH = op.dirname(__file__)
-CRF_MODEL = joblib.load(op.join(MODULE_PATH, "models", "model.joblib"))
+CRF_MODEL = joblib.load(op.join(MODULE_PATH, "models", "new_model_synthetic_newmm_25000_addoptional.joblib"))
 
 ADDR_DF = pd.read_csv(
     op.join(MODULE_PATH, "data", "thai_address_data.csv"), dtype={"zipcode": str}
@@ -59,7 +57,6 @@ def doc2features(doc, i):
     """
     word, postag = doc[i]
 
-    # Features from current word
     features = {
         'word.word': word,
         'word.stopword': is_stopword(word),
@@ -97,7 +94,7 @@ def doc2features(doc, i):
     return features
 
 def extract_features(doc):
-    """
+    """x
     Extract features from a tokenized document for CRF model.
 
     Parameters:
@@ -383,8 +380,38 @@ def check_phone_numbers(dash_count, phone_numbers):
     else:
         return None
 
+def filter_only_address(address, phone_numbers, subdistrict, district, province,postal_code):
+    # Convert phone_numbers, subdistrict, district, province to strings if they are not already
+    phone_numbers_str = str(phone_numbers)
+    subdistrict_str = str(subdistrict)
+    district_str = str(district)
+    province_str = str(province)
+    postal_code_str = str(postal_code)
+
+    
+    # Create a combined regex pattern to match any of the unwanted text
+    patterns_to_remove = [phone_numbers_str, subdistrict_str, district_str, province_str,postal_code_str,"เมือง"]
+    combined_pattern = '|'.join(map(re.escape, patterns_to_remove))
+    
+    # Remove unwanted patterns from the address
+    cleaned_address = re.sub(combined_pattern, '', address)
+    
+    # Return the cleaned address
+    return cleaned_address.strip()
+
+def extract_address(text):
+    if len(text) > 300:
+        text_list = sent_tokenize(preprocess(text), engine="crfcut")
+        keywords = ["บ้าน", "บริษัท", "เลขที่", "/", "ที่อยู่", "บ้านเลขที่", "หมู่", "ซอย", "หมู่บ้าน", "ถนน", "ตำบล", "แขวง", "ที่ทำการ", "แยก", "ตรอก", "โรงแรม"]
+        filtered_text_list = [sentence for sentence in text_list if any(keyword in sentence for keyword in keywords)]
+        new_text = max(filtered_text_list, key=len) if filtered_text_list else ""
+    else:
+        new_text = preprocess(text)
+    
+    return new_text
+
         
-def parse(text=None, display=False, tokenize_engine="newmm-safe"):
+def parse(text=None, display=False, tokenize_engine="newmm"):
     """
     Parse a given address text and extract phone numbers and emails
 
@@ -400,51 +427,39 @@ def parse(text=None, display=False, tokenize_engine="newmm-safe"):
     """
 
     if not text or text.isspace():  # Handling None, empty string, and string with only spaces
-        return   None
+        return None
 
-    text = preprocess(text)    
-    tokens = word_tokenize(text, engine=tokenize_engine, custom_dict=custom_dict)
-    chunks = [text[i:i+512] for i in range(0, len(text), 512)]
+    # text_list = sent_tokenize(preprocess(text), engine="crfcut")
+
+    # keywords = ["บ้าน", "บริษัท", "เลขที่", "/","ที่อยู่","บ้านเลขที่","หมู่","ซอย","หมู่บ้าน","ถนน","ตำบล","แขวง","ที่ทำการ","แยก","ตรอก","โรงแรม"]
+    # filtered_text_list = [sentence for sentence in text_list if any(keyword in sentence for keyword in keywords)]
+    # new_text = max(filtered_text_list, key=len) if filtered_text_list else ""
+    # # # longest_sentence = filtered_text_list[0]
+    # # new_text = preprocess(longest_sentence)
+
+    new_text = extract_address(text)
+
+    tokens = word_tokenize(new_text, engine=tokenize_engine, custom_dict=custom_dict)
+    chunks = [new_text[i:i+512] for i in range(0, len(new_text), 512)]
 
     try:
         features = [tokens_to_features(tokens, i) for i in range(len(tokens))]
     except IndexError as e:
         features = []
     preds = CRF_MODEL.predict([features])[0]
-    # for chunk in chunks:
-    #     cut = word_tokenize(chunk.replace(" ", "<_>"))
-    #     inputs = tokenizer(cut, is_split_into_words=True, return_tensors="pt", max_length=512, truncation=True, padding=True)
-        
-    #     ids = inputs["input_ids"]
-    #     mask = inputs["attention_mask"]
-        
-    #     outputs = model(ids, attention_mask=mask)
-    #     logits = outputs[0]
-    #     predictions = torch.argmax(logits, dim=2)
-    #     predicted_token_class = [model.config.id2label[t.item()] for t in predictions[0]]
-    #     ner_tag = fix_span_error(inputs['input_ids'][0], predicted_token_class)
 
-    phone_numbers = extract_phone_numbers(text.replace('-', ''))
-    email_addresses = extract_emails(text)
-    
+    phone_numbers = extract_phone_numbers(new_text.replace('-', ''))
+    email_addresses = extract_emails(new_text)
+
     preds_ = list(zip(tokens, preds))
-    preds_ = [(value, 'LOC') if value in SUBDISTRICTS + DISTRICTS + PROVINCES else (value, tag) for value, tag in preds_]
-    
 
-    # name = "".join([token for token, c in preds_ if c == "NAME"]).strip()
     address = "".join([token for token, c in preds_ if c == "ADDR"]).strip()
     location = " ".join([token for token, c in preds_ if c == "LOC"]).strip()
-
-    # name = "".join([token if token != '<_>' else ' ' for token, c in ner_tag if c == "B-PERSON" or c == "I-PERSON"]).strip()
-    # location = " ".join([token if token != '<_>' else ' ' for token, c in ner_tag if c == "B-LOCATION" or c == "I-LOCATION"]).strip()
-
+    print(preds_)
     if len(location.split()) <= 4:
         location = ""
 
-    # if name == "":
-    #     name ='-'
-        
-    postal_code = extract_postal_code(text)
+    postal_code = extract_postal_code(new_text)
     postal_list = postal_code.split(';')
     unique_postal_list = list(set(postal_list))
     unique_postal = ';'.join(unique_postal_list)
@@ -452,7 +467,6 @@ def parse(text=None, display=False, tokenize_engine="newmm-safe"):
     if unique_postal is not None:
         if unique_postal not in PROVINCES_POST_DICT:
             unique_postal = "-"
-
 
     subdistrict = None
     district = None
@@ -464,8 +478,8 @@ def parse(text=None, display=False, tokenize_engine="newmm-safe"):
     if (len_provinces_subdistricts_districts >= 3 or sum(word in ['อำเภอ', 'ตำบล', 'จังหวัด', 'เขต', 'แขวง','เเขวง'] for word in tokens) >= 2):
         if unique_postal != "-" and unique_postal in PROVINCES_POST_DICT:
             province = PROVINCES_POST_DICT[unique_postal][0]
-        elif "จังหวัด" in text:
-            province_name_split = [part for part in text.split("จังหวัด") if part.strip()]
+        elif "จังหวัด" in new_text:
+            province_name_split = [part for part in new_text.split("จังหวัด") if part.strip()]
             if len(province_name_split) > 1:
                 province_name = province_name_split[-1].split()[0]
                 province = province_name
@@ -473,18 +487,16 @@ def parse(text=None, display=False, tokenize_engine="newmm-safe"):
                 province = "-"
         else:
             province = extract_location(location, option="province")
-            
-        if "อำเภอ" in text:
-            district_name = text.split("อำเภอ")[-1].split()[0]
+
+        if "อำเภอ" in new_text:
+            district_name = new_text.split("อำเภอ")[-1].split()[0]
             district = district_name
             if district == 'เมือง':
-                district = extract_location(
-                location, option="district", province=province)
-        elif "เขต" in text:
-            district_name = text.split("เขต")[-1].split()[0]
+                district = extract_location(location, option="district", province=province)
+        elif "เขต" in new_text:
+            district_name = new_text.split("เขต")[-1].split()[0]
             district = district_name
-        
-        elif district is None and unique_postal != "-" and unique_postal in DISTRICTS_POST_DICT: # Check in case it dosen can use pattern ตำบล or ต to extract etc.  "ปภาวิน ดียิ่ง 18 ม.12 ไพศาล ประโคนชัย จังหวัดบุรีรัมย์ 31140 0942835362"
+        elif district is None and unique_postal != "-" and unique_postal in DISTRICTS_POST_DICT:
             districts_sorted = sorted(DISTRICTS_POST_DICT[unique_postal], key=len, reverse=True)
             district = "-"
             for token in tokens:
@@ -492,22 +504,19 @@ def parse(text=None, display=False, tokenize_engine="newmm-safe"):
                 if best_district:
                     district = best_district
                     break
-
         else:
             district = '-'
-            
-        if "ตำบล" in text:
-            subdistrict_name = text.split("ตำบล")[-1].split()[0]
+
+        if "ตำบล" in new_text:
+            subdistrict_name = new_text.split("ตำบล")[-1].split()[0]
             subdistrict = subdistrict_name
-        elif subdistrict is None and "เขวง" in text:  # Check for "เขวง" instead of "เเขวง"
-            subdistrict_name = text.split("เขวง")[-1].split()[0]
+        elif subdistrict is None and "เขวง" in new_text:  # Check for "เขวง" instead of "เเขวง"
+            subdistrict_name = new_text.split("เขวง")[-1].split()[0]
             subdistrict = subdistrict_name
-        elif subdistrict is None and "แขวง" in text:  # Check for "แขวง"
-            subdistrict_name = text.split("แขวง")[-1].split()[0]
+        elif subdistrict is None and "แขวง" in new_text:  # Check for "แขวง"
+            subdistrict_name = new_text.split("แขวง")[-1].split()[0]
             subdistrict = subdistrict_name
-        
-            
-        elif subdistrict is None and unique_postal != "-" and unique_postal in SUBDISTRICTS_POST_DICT: # Check in case it dosen can use pattern ตำบล or ต to extract etc.  "ปภาวิน ดียิ่ง 18 ม.12 ไพศาล ประโคนชัย จังหวัดบุรีรัมย์ 31140 0942835362"
+        elif subdistrict is None and unique_postal != "-" and unique_postal in SUBDISTRICTS_POST_DICT:
             subdistricts_sorted = sorted(SUBDISTRICTS_POST_DICT[unique_postal], key=len, reverse=True)
             subdistrict = "-"
             for token in tokens:
@@ -533,18 +542,16 @@ def parse(text=None, display=False, tokenize_engine="newmm-safe"):
                 district = 'เมือง' + province
             else:
                 district = correct_location_name(district, DISTRICTS)
-        
-        #Remove duplicated postal code
-        province = re.sub(r'[^\u0E00-\u0E7F]', '', province) #ลบกรณีแบ่งคำแล้วติดตัวเลขไปรษณีย์ เช่น แพร่12124
+
+        province = re.sub(r'[^\u0E00-\u0E7F]', '', province)  # Remove any non-Thai characters
         subdistrict = clean_location_text(str(subdistrict))
-        district = clean_location_text(str(district))
         province = clean_location_text(str(province))
-        patterns = ['เขต', 'เเขวง', 'จังหวัด', 'แขวง','ตำบล','อำเภอ']
+
+        patterns = ['เขต', 'เเขวง', 'จังหวัด', 'แขวง', 'ตำบล', 'อำเภอ']
         if unique_postal == "":
-            unique_postal ='-'
+            unique_postal = '-'
         patterns.extend([subdistrict, district, province, unique_postal])
 
-        # Extend patterns with phone numbers and email addresses if they are lists
         if isinstance(phone_numbers, list):
             patterns.extend(phone_numbers)
         else:
@@ -555,25 +562,20 @@ def parse(text=None, display=False, tokenize_engine="newmm-safe"):
         else:
             patterns.append(email_addresses)
 
-        for pattern in patterns:
-            clean_address = re.sub(pattern, '', address)
-        
-        clean_address = clean_location_text(preprocess(clean_address),phone_numbers)
-        patterns_to_remove = [str(phone_numbers), str(subdistrict), str(district)]
-
-        # Combine all patterns into one
-        combined_pattern = '|'.join(map(re.escape, patterns_to_remove))
-
-        # Substitute all patterns with an empty string and clean up extra spaces
-        clean_address = re.sub(combined_pattern, '', clean_address)
-        clean_address = re.sub(r'\s+', ' ', clean_address).strip()
-        dash_count = sum(1 for field in [subdistrict, district, province,phone_numbers, email_addresses,unique_postal] if field == '-')
+        print(address)
+        clean_address = (clean_location_text(address))
+        clean_address = filter_only_address(clean_address, phone_numbers, subdistrict, district, province,postal_code)
+        # patterns_to_remove = [str(phone_numbers), str(subdistrict), str(district), str(province)]
+        # combined_pattern = '|'.join(map(re.escape, patterns_to_remove))
+        # clean_address = re.sub(address, '', clean_address)
+        # clean_address = re.sub(r'\s+', ' ', clean_address).strip()
+        dash_count = sum(1 for field in [subdistrict, district, province, phone_numbers, email_addresses, unique_postal] if field == '-')
         if dash_count >= 4:
-            return 
+            return
         else:
             return {
                 "text": text,
-                "address": preprocess(clean_address),
+                "address": clean_address,
                 "subdistrict": subdistrict,
                 "district": district,
                 "province": province,
@@ -586,7 +588,3 @@ def parse(text=None, display=False, tokenize_engine="newmm-safe"):
             return {"phone": phone_numbers}
         else:
             return None
-        
-
-
-
