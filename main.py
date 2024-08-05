@@ -1,6 +1,8 @@
 import streamlit as st
 import thaiaddress
 import time
+from streamlit_gsheets import GSheetsConnection
+import pandas as pd
 
 def main():
     st.title("Thai Address Parser")
@@ -40,6 +42,43 @@ def main():
         except Exception as e:
             st.error("ไม่ใช่ข้อมูลที่อยู่")
             st.write(f"Error details: {e}")
+
+# Feedback Management Portal
+st.title("Feedback Management Portal")
+st.markdown("Enter the details of the new Feedback below.")
+
+# Establishing a Google Sheets connection
+conn = st.connection("gsheets", type=GSheetsConnection, spreadsheet="Ner_Feedback")  # specify your spreadsheet name here
+
+# Fetch existing Feedbacks data
+existing_data = conn.read(worksheet="feedback", usecols=None, ttl=5)
+existing_data = existing_data.dropna(how="all")
+
+# Onboarding New Feedback Form
+with st.form(key="Ner_Feedback_form"):
+    feedback = st.text_input(label="Feedback*")
+    # Mark mandatory fields
+    st.markdown("**required*")
+
+    submit_button = st.form_submit_button(label="Submit Feedback Details")
+
+    # If the submit button is pressed
+    if submit_button:
+        # Create a new row of Feedback data
+        Feedback_data = pd.DataFrame(
+            [
+                {
+                    "Feedback": feedback,
+                }
+            ]
+        )
+        # Add the new Feedback data to the existing data
+        updated_df = pd.concat([existing_data, Feedback_data], ignore_index=True)
+
+        # Update Google Sheets with the new Feedback data
+        conn.update(worksheet="feedback", data=updated_df)
+
+        st.success("Feedback details successfully submitted!")
 
 if __name__ == "__main__":
     main()
