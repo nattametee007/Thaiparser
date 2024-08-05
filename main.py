@@ -7,6 +7,53 @@ import pandas as pd
 # Global variable for address_input
 address_input = ""
 
+def submit_feedback():
+    global address_input
+
+    # Establishing a Google Sheets connection
+    conn = st.connection("gsheets", type=GSheetsConnection, spreadsheet="Ner_Feedback")  # specify your spreadsheet name here
+
+    # Fetch existing Feedbacks data
+    existing_data = conn.read(worksheet="feedback", usecols=None, ttl=5)
+    existing_data = existing_data.dropna(how="all")
+
+    False_TYPES = [
+        "ข้อความไม่ได้เป็นที่อยู่ แต่โมเดลสกัดที่อยู่ออกมา",
+        "ข้อความเป็นที่อยู่ แต่โมเดลไม่สกัดที่อยู่ออกมา",
+        "ข้อมูลที่อยู่ไม่ตรงกับที่กรอก",
+        "สกัดข้อมูล Address ผิด",
+        "ข้อมูลที่อยู่ไม่ตรงกับของจริง",
+    ]
+
+    # Onboarding New Feedback Form
+    with st.form(key="Ner_Feedback_form"):
+        feedback = st.text_input(label="Feedback*")
+        type_false = st.selectbox("False Type*", options=False_TYPES, index=None)
+        suggest = st.text_input(label="Suggestions*")
+        # Mark mandatory fields
+        submit_button = st.form_submit_button(label="Submit Feedback Details")
+
+        # If the submit button is pressed
+        if submit_button:
+            # Create a new row of Feedback data
+            Feedback_data = pd.DataFrame(
+                [
+                    {
+                        "Messages": address_input,
+                        "Feedback": feedback,
+                        "Type": type_false,
+                        "Suggestions": suggest
+                    }
+                ]
+            )
+            # Add the new Feedback data to the existing data
+            updated_df = pd.concat([existing_data, Feedback_data], ignore_index=True)
+
+            # Update Google Sheets with the new Feedback data
+            conn.update(worksheet="feedback", data=updated_df)
+
+            st.success("Feedback details successfully submitted!")
+
 def main():
     global address_input
 
@@ -44,56 +91,13 @@ def main():
             else:
                 st.write(parsed_address)
             st.write(f"**Execution Time:** {execution_time:.4f} seconds")
+
+            # Submit feedback after parsing
+            submit_feedback()
+
         except Exception as e:
             st.error("ไม่ใช่ข้อมูลที่อยู่")
             st.write(f"Error details: {e}")
-
-# Feedback Management Portal
-st.title("Feedback Management Portal")
-st.markdown("Enter the details of the new Feedback below.")
-
-# Establishing a Google Sheets connection
-conn = st.connection("gsheets", type=GSheetsConnection, spreadsheet="Ner_Feedback")  # specify your spreadsheet name here
-
-# Fetch existing Feedbacks data
-existing_data = conn.read(worksheet="feedback", usecols=None, ttl=5)
-existing_data = existing_data.dropna(how="all")
-
-False_TYPES = [
-    "ข้อความไม่ได้เป็นที่อยู่ แต่โมเดลสกัดที่อยู่ออกมา",
-    "ข้อความเป็นที่อยู่ แต่โมเดลไม่สกัดที่อยู่ออกมา",
-    "ข้อมูลที่อยู่ไม่ตรงกับที่กรอก",
-    "สกัดข้อมูล Address ผิด",
-    "ข้อมูลที่อยู่ไม่ตรงกับของจริง",
-]
-
-# Onboarding New Feedback Form
-with st.form(key="Ner_Feedback_form"):
-    feedback = st.text_input(label="Feedback*")
-    type_false = st.selectbox("False Type*", options=False_TYPES, index=None)
-    suggest = st.text_input(label="Suggestions*")
-    # Mark mandatory fields
-    submit_button = st.form_submit_button(label="Submit Feedback Details")
-
-    # If the submit button is pressed
-    if submit_button:
-        # Create a new row of Feedback data
-        Feedback_data = pd.DataFrame(
-        [
-            {   "Messages": address_input,
-                "Feedback": feedback,
-                "Type": type_false,
-                "Suggestions": suggest
-            }
-        ]
-        )
-        # Add the new Feedback data to the existing data
-        updated_df = pd.concat([existing_data, Feedback_data], ignore_index=True)
-
-        # Update Google Sheets with the new Feedback data
-        conn.update(worksheet="feedback", data=updated_df)
-
-        st.success("Feedback details successfully submitted!")
 
 if __name__ == "__main__":
     main()
