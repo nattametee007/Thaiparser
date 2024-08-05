@@ -4,7 +4,12 @@ import time
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 
+# Global variable for address_input
+address_input = ""
+
 def main():
+    global address_input
+
     st.title("Thai Address Parser")
 
     # Address examples
@@ -75,21 +80,20 @@ with st.form(key="Ner_Feedback_form"):
         # Create a new row of Feedback data
         Feedback_data = pd.DataFrame(
         [
-            {           "Messages": address_input,
-                        "Feedback": feedback,
-                        "Type": type_false,
-                        "Suggestions": suggest
+            {   "Messages": address_input,
+                "Feedback": feedback,
+                "Type": type_false,
+                "Suggestions": suggest
             }
         ]
         )
-            # Add the new Feedback data to the existing data
+        # Add the new Feedback data to the existing data
         updated_df = pd.concat([existing_data, Feedback_data], ignore_index=True)
 
-            # Update Google Sheets with the new Feedback data
+        # Update Google Sheets with the new Feedback data
         conn.update(worksheet="feedback", data=updated_df)
 
         st.success("Feedback details successfully submitted!")
-
 
 if __name__ == "__main__":
     main()
