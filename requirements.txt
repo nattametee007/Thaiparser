@@ -10,3 +10,5 @@ Levenshtein
 sklearn_crfsuite
 jsonlines
 fastapi
+streamlit==1.36.0
+st-gsheets-connection
