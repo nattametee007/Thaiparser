@@ -64,7 +64,6 @@ False_TYPES = [
 
 # Onboarding New Feedback Form
 with st.form(key="Ner_Feedback_form"):
-    message = st.text_input(label="Message*")
     feedback = st.text_input(label="Feedback*")
     type_false = st.selectbox("False Type*", options=False_TYPES, index=None)
     suggest = st.text_input(label="Suggestions*")
@@ -76,7 +75,7 @@ with st.form(key="Ner_Feedback_form"):
         # Create a new row of Feedback data
         Feedback_data = pd.DataFrame(
         [
-            {           "Messages": message,
+            {           "Messages": address_input,
                         "Feedback": feedback,
                         "Type": type_false,
                         "Suggestions": suggest
