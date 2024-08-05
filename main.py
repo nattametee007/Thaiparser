@@ -4,12 +4,8 @@ import time
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 
-# Global variable for address_input
-address_input = ""
-
+# Function to submit feedback
 def submit_feedback():
-    global address_input
-
     # Establishing a Google Sheets connection
     conn = st.connection("gsheets", type=GSheetsConnection, spreadsheet="Ner_Feedback")  # specify your spreadsheet name here
 
@@ -30,11 +26,14 @@ def submit_feedback():
         feedback = st.text_input(label="Feedback*")
         type_false = st.selectbox("False Type*", options=False_TYPES, index=None)
         suggest = st.text_input(label="Suggestions*")
-        # Mark mandatory fields
         submit_button = st.form_submit_button(label="Submit Feedback Details")
 
-        # If the submit button is pressed
         if submit_button:
+            address_input = st.session_state.get("address_input", "")
+            if not address_input:
+                st.error("Address input is missing!")
+                return
+
             # Create a new row of Feedback data
             Feedback_data = pd.DataFrame(
                 [
@@ -55,8 +54,6 @@ def submit_feedback():
             st.success("Feedback details successfully submitted!")
 
 def main():
-    global address_input
-
     st.title("Thai Address Parser")
 
     # Address examples
@@ -78,6 +75,9 @@ def main():
     else:
         address_input = st.text_input("Enter the address:", address_examples[example_selected])
 
+    if address_input:
+        st.session_state["address_input"] = address_input
+
     if st.button("Parse Address"):
         start_time = time.time()
         try:
@@ -91,13 +91,12 @@ def main():
             else:
                 st.write(parsed_address)
             st.write(f"**Execution Time:** {execution_time:.4f} seconds")
-
-            # Submit feedback after parsing
-            submit_feedback()
-
         except Exception as e:
             st.error("ไม่ใช่ข้อมูลที่อยู่")
             st.write(f"Error details: {e}")
 
 if __name__ == "__main__":
     main()
+
+# Render the feedback form outside the main function to ensure it always displays
+submit_feedback()
