@@ -54,31 +54,43 @@ conn = st.connection("gsheets", type=GSheetsConnection, spreadsheet="Ner_Feedbac
 existing_data = conn.read(worksheet="feedback", usecols=None, ttl=5)
 existing_data = existing_data.dropna(how="all")
 
+False_TYPES = [
+    "ข้อความไม่ได้เป็นที่อยู่ แต่โมเดลสกัดที่อยู่ออกมา",
+    "ข้อความเป็นที่อยู่ แต่โมเดลไม่สกัดที่อยู่ออกมา",
+    "ข้อมูลที่อยู่ไม่ตรงกับที่กรอก",
+    "สกัดข้อมูล Address ผิด",
+    "ข้อมูลที่อยู่ไม่ตรงกับของจริง",
+]
+
 # Onboarding New Feedback Form
 with st.form(key="Ner_Feedback_form"):
+    message = st.text_input(label="Message*")
     feedback = st.text_input(label="Feedback*")
+    type_false = st.selectbox("False Type*", options=False_TYPES, index=None)
+    suggest = st.text_input(label="Suggestions*")
     # Mark mandatory fields
-    st.markdown("**required*")
-
     submit_button = st.form_submit_button(label="Submit Feedback Details")
 
     # If the submit button is pressed
     if submit_button:
         # Create a new row of Feedback data
         Feedback_data = pd.DataFrame(
-            [
-                {
-                    "Feedback": feedback,
-                }
-            ]
+        [
+            {           "Messages": message,
+                        "Feedback": feedback,
+                        "Type": type_false,
+                        "Suggestions": suggest
+            }
+        ]
         )
-        # Add the new Feedback data to the existing data
+            # Add the new Feedback data to the existing data
         updated_df = pd.concat([existing_data, Feedback_data], ignore_index=True)
 
-        # Update Google Sheets with the new Feedback data
+            # Update Google Sheets with the new Feedback data
         conn.update(worksheet="feedback", data=updated_df)
 
         st.success("Feedback details successfully submitted!")
+
 
 if __name__ == "__main__":
     main()
