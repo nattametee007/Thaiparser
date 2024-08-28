@@ -16,14 +16,16 @@ from .utils import (
     is_stopword,
     clean_location_text,
     isThaiWord,
+    merge_tokens,
+    merge_labels
 )
 from Levenshtein import jaro
 from pythainlp.util import Trie
+from pythainlp.phayathaibert.core import NamedEntityTagger
 
 import logging
 logging.getLogger().setLevel(logging.ERROR)
 
-# read model from models path, define colors for output classes
 MODULE_PATH = op.dirname(__file__)
 CRF_MODEL = joblib.load(op.join(MODULE_PATH, "models", "new_model_synthetic_newmm_25000_addoptional.joblib"))
 
@@ -42,6 +44,15 @@ PROVINCES_POST_DICT = ADDR_DF.groupby("zipcode")["province"].apply(list)
 
 custom_dict = SUBDISTRICTS + DISTRICTS + PROVINCES
 custom_dict = Trie(custom_dict)
+
+COLORS = {
+    "NAME": "#fbd46d",
+    "ADDR": "#ff847c",
+    "LOC": "#87d4c5",
+    "POST": "#def4f0",
+    "PHONE": "#ffbffe",
+    "EMAIL": "#91a6b8",
+}
 
 def doc2features(doc, i):
     """
@@ -195,6 +206,21 @@ def extract_location(text, option="province", province=None, postal_code=None):
         pass
     return location
 
+def find_postal_code(subdistrict=None, district=None, province=None):
+    query = {}
+    if subdistrict:
+        query["subdistrict"] = subdistrict
+    if district:
+        query["district"] = district
+    if province:
+        query["province"] = province
+    
+    result = ADDR_DF.loc[(ADDR_DF[list(query)] == pd.Series(query)).all(axis=1), "zipcode"]
+    
+    if not result.empty:
+        return result.iloc[0]
+    else:
+        return "-"
 
 def tokens_to_features(tokens, i):
    """
@@ -265,19 +291,27 @@ def extract_phone_numbers(text):
     Returns:
     list or str: The list of extracted phone numbers, or a single phone number if only one is found, or an empty string if none are found.
     """
-    phone_number_pattern = r'\b0\d{1,2}\s*\d{1,3}\s*\d{3}\s*\d{4}\b'
+    text = re.sub(r'\+66\s?', '0', text)
+    # Updated pattern to match phone numbers with any non-digit separators
+    phone_number_pattern = r'\b0\d{1,2}\D?\d{3}\D?\d{3,4}\b'
 
     matches = re.findall(phone_number_pattern, text)
 
-    phone_numbers = [re.sub(r'\D', '', phone_number) for phone_number in matches]
-    phone_numbers = [phone_number[:10] for phone_number in phone_numbers]
+    phone_numbers = []
+    for phone_number in matches:
+        cleaned_number = re.sub(r'\D', '', phone_number)  # Remove all non-digit characters
+        if cleaned_number.startswith("02"):
+            phone_numbers.append(cleaned_number[:9])  # Keep 9 digits for numbers starting with 02
+        else:
+            phone_numbers.append(cleaned_number[:10])  # Keep 10 digits for other numbers
 
     if len(phone_numbers) == 1:
-        return phone_numbers[0].replace("-", "")
+        return phone_numbers[0]
     elif len(phone_numbers) > 1:
         return phone_numbers
     else:
         return "-"
+
 
 
 def extract_emails(text):
@@ -382,17 +416,42 @@ def filter_only_address(address, phone_numbers, subdistrict, district, province,
 
 def extract_address(text):
     if len(text) > 300:
-        text_list = sent_tokenize(preprocess(text), engine="crfcut")
+        text_list = sent_tokenize(text, engine="crfcut")
         keywords = ["บ้าน", "บริษัท", "เลขที่", "/", "ที่อยู่", "บ้านเลขที่", "หมู่", "ซอย", "หมู่บ้าน", "ถนน", "ตำบล", "แขวง", "ที่ทำการ", "แยก", "ตรอก", "โรงแรม"]
         filtered_text_list = [sentence for sentence in text_list if any(keyword in sentence for keyword in keywords)]
         new_text = max(filtered_text_list, key=len) if filtered_text_list else ""
+        if "กรุงเทพมหานคร" in text:
+            new_text = new_text.replace("อำเภอ", "เขต").replace("ตำบล", "แขวง")
     else:
         new_text = preprocess(text)
     
     return new_text
 
-        
-def parse(text=None, display=False, tokenize_engine="newmm"):
+def display_entities(tokens: list, labels: list):
+    """
+    Display tokens and labels
+
+    References
+    ----------
+    Spacy, https://spacy.io/usage/visualizers
+    """
+    options = {"ents": list(COLORS.keys()), "colors": COLORS}
+
+    ents = []
+    text = ""
+    s = 0
+    for token, label in zip(tokens, labels):
+        text += token
+        if label != "O":
+            ents.append({"start": s, "end": s + len(token), "label": label})
+        s += len(token)
+
+    text_display = {"text": text, "ents": ents, "title": None}
+    displacy.render(
+        text_display, style="ent", options=options, manual=True, jupyter=True
+    )
+
+def parse(text=None, display:bool=False, tokenize_engine="newmm"):
     """
     Parse a given address text and extract phone numbers and emails
 
@@ -412,6 +471,8 @@ def parse(text=None, display=False, tokenize_engine="newmm"):
 
     detected_address = extract_address(text)
     new_text = preprocess(text)
+    # new_text = text
+
     tokens = word_tokenize(detected_address, engine=tokenize_engine, custom_dict=custom_dict)
     try:
         features = [tokens_to_features(tokens, i) for i in range(len(tokens))]
@@ -426,7 +487,6 @@ def parse(text=None, display=False, tokenize_engine="newmm"):
 
     address = "".join([token for token, c in preds_ if c == "ADDR"]).strip()
     location = " ".join([token for token, c in preds_ if c == "LOC"]).strip()
-    print(preds_)
     if len(location.split()) <= 4:
         location = ""
 
@@ -442,11 +502,13 @@ def parse(text=None, display=False, tokenize_engine="newmm"):
     subdistrict = None
     district = None
     province = None
-
+    print(address)
     len_provinces_subdistricts_districts = len([word for word in tokens if word in PROVINCES + SUBDISTRICTS + DISTRICTS])
+    print(len_provinces_subdistricts_districts)
     if unique_postal != "-":
         len_provinces_subdistricts_districts += 1
-    if (len_provinces_subdistricts_districts >= 3 or sum(word in ['อำเภอ', 'ตำบล', 'จังหวัด', 'เขต', 'แขวง','เเขวง'] for word in tokens) >= 2):
+    if (len_provinces_subdistricts_districts >= 2 or sum(word in ['อำเภอ', 'ตำบล', 'จังหวัด', 'เขต', 'แขวง','เเขวง'] for word in tokens) >= 2):
+        print(new_text)
         if unique_postal != "-" and unique_postal in PROVINCES_POST_DICT:
             province = PROVINCES_POST_DICT[unique_postal][0]
         elif "จังหวัด" in new_text:
@@ -506,7 +568,7 @@ def parse(text=None, display=False, tokenize_engine="newmm"):
             else:
                 district = correct_location_name(district, DISTRICTS_POST_DICT[unique_postal])
         else:
-            unique_postal = get_postal_code(subdistrict, province)
+            unique_postal = find_postal_code(subdistrict,district,province)
             province = correct_location_name(province, PROVINCES)
             subdistrict = correct_location_name(subdistrict, SUBDISTRICTS)
             if district == 'เมือง':
@@ -514,13 +576,8 @@ def parse(text=None, display=False, tokenize_engine="newmm"):
             else:
                 district = correct_location_name(district, DISTRICTS)
 
-        province = re.sub(r'[^\u0E00-\u0E7F]', '', province)  # Remove any non-Thai characters
-        subdistrict = clean_location_text(str(subdistrict))
-        province = clean_location_text(str(province))
-
         patterns = ['เขต', 'เเขวง', 'จังหวัด', 'แขวง', 'ตำบล', 'อำเภอ']
-        if unique_postal == "":
-            unique_postal = '-'
+    
         patterns.extend([subdistrict, district, province, unique_postal])
 
         if isinstance(phone_numbers, list):
@@ -533,12 +590,17 @@ def parse(text=None, display=False, tokenize_engine="newmm"):
         else:
             patterns.append(email_addresses)
 
-        print(address)
         clean_address = (clean_location_text(address))
+        subdistrict = clean_location_text(str(subdistrict))
+        province = clean_location_text(str(province))
         clean_address = filter_only_address(clean_address, phone_numbers, subdistrict, district, province,postal_code)
         dash_count = sum(1 for field in [subdistrict, district, province, phone_numbers, email_addresses, unique_postal] if field == '-')
+        if display:
+            merge, labels = merge_labels(preds)
+            tokens = merge_tokens(tokens, merge)
+            display_entities(tokens, labels)
         if dash_count >= 4:
-            return
+            return None
         else:
             return {
                 "text": text,
@@ -555,3 +617,7 @@ def parse(text=None, display=False, tokenize_engine="newmm"):
             return {"phone": phone_numbers}
         else:
             return None
+
+
+
+
