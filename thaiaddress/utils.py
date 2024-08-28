@@ -52,7 +52,6 @@ def remove_urls(text):
     return url_pattern.sub(r'', text)
 
 
-
 def remove_spaces_from_phone_numbers(text):
     phone_number_pattern = r'\b0\d{1,2}[ _.,-]*\d{1,3}[ _.,-]*\d{3}[ _.,-]*\d{3,4}\b'
     matches = re.findall(phone_number_pattern, text)
@@ -187,20 +186,17 @@ def preprocess(text: str) -> str:
     text = text.replace("นาง","")
     text = text.replace("ตำบล/แขวง","ตำบล")
     text = text.replace("อำเภอ/เขต","อำเภอ")
-    text = text.replace("บลท", "บ้านเลขที่ ")
-    text = text.replace("หมู่", "หมู่ ")
-    text = text.replace("ซ.", "ซอย ")
-    text = text.replace("ซอย", "ซอย ")
-    text = text.replace("ถ.", "ถนน ")
-    text = text.replace("ถนน", "ถนน ")
-    text = text.replace("หมุ่", "หมู่ ")
-    text = text.replace('ม.', "หมู่ ")
+    
+    # text = text.replace("บลท", "บ้านเลขที่ ")
+    # text = text.replace("หมู่", "หมู่ ")
+    # text = text.replace("ซ.", "ซอย ")
+    # text = text.replace("ซอย", "ซอย ")
+    # text = text.replace("ถ.", "ถนน ")
+    # text = text.replace("ถนน", "ถนน ")
+    # text = text.replace("หมุ่", "หมู่ ")
+    # text = text.replace('ม.', "หมู่ ")
     text = re.sub(r'(?<!\S)ม(?=\d)', 'หมู่', text)
     text = re.sub(r'(?<!\S)บ(?!\S)', 'บ้าน', text)
-
-
-    if 'กรุงเทพมหานคร' not in text:
-        text = text.replace("กรุงเทพ", "กรุงเทพมหานคร")
 
     # Remove spaces from phone numbers in the text
     text = remove_spaces_from_phone_numbers(text)
@@ -232,6 +228,10 @@ def preprocess(text: str) -> str:
     
     # Remove the zero-width space character
     text = text.replace("\u200b", "")
+    
+    # Append " กรุงเทพมหานคร" to the text if it contains "แขวง" or "เขต" and does not already contain "กรุงเทพ", "กทม.", "กทม", or "กรุงเทพมหานคร", and does not contain "อำเภอ", "ตำบล", "อ.", or "ต."
+    # if ("แขวง" in text or "เขต" in text) and not any(area in text for area in ["กรุงเทพ", "กทม.", "กทม", "กรุงเทพมหานคร"]) and not any(area in text for area in ["อำเภอ", "ตำบล", "อ.", "ต."]) and not any(province in text for province in PROVINCES):
+    #     text += " กรุงเทพมหานคร"
     
     # Remove dots that are not part of a number or email
     text = re.sub(r'(?<!\S)\.(?!\S|\d{2,}@)', '', text)
